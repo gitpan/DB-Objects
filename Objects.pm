@@ -5,7 +5,7 @@ use warnings qw(all);
 use vars qw($VERSION);
 
 BEGIN {
-    $VERSION=0.02;
+    $VERSION=0.03;
 }
 
 ###
@@ -67,7 +67,7 @@ sub _readonly { # Sets/detects whether a data mehod is tagged read-only
                 # Used by AUTOLOAD to detect read-only method calls
     my $self=shift;
     my $package=(UNIVERSAL::isa($_[0],__PACKAGE__) && shift) || caller;
-    my $var=shift;
+    my $var=uc(shift);
     if (@_) {local $_=shift;$self->{_REGISTRY}{_DATA}{$var}{access}=(!($_)?1:0) if (/[01]/);} #Set to "0" to catch in this check next time
     return (!($self->{_REGISTRY}{_DATA}{$var}{access}) ||
             $self->{_REGISTRY}{_DATA}{$var}{source} eq $self->_primary);
@@ -88,6 +88,7 @@ sub _validate { # Marks a namespace as tied to the back-end database
 	}
     }
     $self->{_REGISTRY}{$package}{prep}=1;
+    $self->{_REGISTRY}{ref($self)}{prep}=1;
     $self->_clean($package);
 }
 
@@ -198,7 +199,6 @@ sub AUTOLOAD {  # Default method call handler
 	    if ($self->_isobject($param)) { # Prepare object
 		return (wantarray?undef:0) unless $self->_o_prep($param);
 	    }
-
 	    if ($self->_isobjarray($param)) { # Object array returns special values
 		    return (wantarray?@{$self->{uc($param)}}:$self->{_REGISTRY}{_DATA}{uc($param)}{prep});
 	    } else {
@@ -313,7 +313,14 @@ sub _o_prep {
     return 0 unless $self->valid($source);
     return $self->{_REGISTRY}{_DATA}{$var}{prep} if
 	$self->{_REGISTRY}{_DATA}{$var}{prep};
-    $self->{_REGISTRY}{_DATA}{$var}{prep}=(($self->{$var}=$class->new($self->{_REGISTRY}{_DATA}{$var}{data}))?1:0);
+    if ($self->_isobjarray($var)) {
+	for (my $i=0;$i<=$#{$self->{_REGISTRY}{_DATA}{$var}{data}};$i++) {
+	    $self->{$var}[$i]=$class->new($self->{_REGISTRY}{_DATA}{$var}{data}[$i]);
+	}
+	$self->{_REGISTRY}{_DATA}{$var}{prep}=$#{$self->{_REGISTRY}{_DATA}{$var}{data}}+1;
+    } else {
+	$self->{_REGISTRY}{_DATA}{$var}{prep}=(($self->{$var}=$class->new($self->{_REGISTRY}{_DATA}{$var}{data}))?1:0);
+    }
     return $self->{_REGISTRY}{_DATA}{$var}{prep};
 }
 
@@ -378,7 +385,7 @@ all have that File menu with Open , Save, Exit... The Help menu with Help
 topics, an optional upgrade, etc).  So I guess you could call this library
 an API for developing database bound objects.
 
-For more information, see http://epoch.jct.ac.il/YAPC/
+For more information, see http://www.beamartyr.net/YAPC/
 
 =head1 BASIC OBJECTS API
 
@@ -436,7 +443,7 @@ sub _refresh {
 =head1 ADVANCED OBJECTS API
 
 Beyond storing simple values, you can also magically construct objects using
-the primary key of the target objects.  Using the above example (under L<BACKGROUND>),
+the primary key of the target objects.  Using the above example,
 we spoke of a phone book catalog, which has a person object and a phone number object.
 Would it be nice, if instead of writing:
 
@@ -459,7 +466,22 @@ the same way you'd store any other data for a normal access method, and when
 you _validate the object, the data will be appropriately stored.  The object will be
 constructed on the first call to the access method.
 
-=head1 Internal functions
+=item _objarray($var, [$package])
+
+This should be called in the blank() constructor.  It is used to mark access method
+$var as an embedded array of objects of type $package.  If $package is not passed
+as an argument, it will default to the current package (eg, Your::Object).  The
+functionality is similar to that of _object except that we are dealing with arrays.
+As such, care must be taken to properly initialize the array.  To use it, store an
+array (not a reference) in the _refresh function.  When _validate is called on the
+object, the array will be stored and objects will be called on subsequent access
+via the method call $var.  The method call will return the number of objects in
+the array if called in a scalar context, and the array of objects if called in a
+list context.  The objects will be constructed upon access.
+
+Note that this functionality is still under construction.
+
+=head1 INTERNAL FUNCTIONS
 
 =item _blank(@vars)
 
@@ -470,6 +492,7 @@ all of the access methods in the registry under the module's namespace, so that
 AUTOLOAD can auto-load the module to refresh or update the database for it.
 
 =item _validate()
+
 This method should be called from the _refresh function.  It tells the object that
 its data has been updated and to remark itself as having fresh unchanged data.
 
@@ -485,4 +508,3 @@ under the same terms as Perl itself.
 L<perl>.
 
 =cut
-
