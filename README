@@ -1,6 +1,16 @@
 DB::Objects
 =======================
 
+SYNOPSIS
+
+This module is intended to provide an object-oriented framework for
+accessing data sources.  The source of the data is completely abstract,
+allowing for complete flexibility for the data back-end.  This module is
+NOT intended to provide a persistance layer - please use another module
+(like TANGRAMS) if you require object persistance.
+
+For more complete documentation, please check the POD documentation
+
 INSTALLATION
 
 To install this module type the following:
